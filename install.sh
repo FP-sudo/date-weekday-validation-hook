@@ -16,9 +16,10 @@ BACKUP="${SETTINGS}.bak.$(date +%Y%m%d%H%M%S)"
 command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 が見つかりません"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq が必要です (brew install jq / apt install jq)"; exit 1; }
 
-PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-PY_OK=$(python3 -c 'import sys; print(1 if sys.version_info >= (3,8) else 0)')
-if [ "${PY_OK}" != "1" ]; then
+PY_VER=$(python3 --version 2>&1 | cut -d' ' -f2)
+PY_MAJ=$(echo "${PY_VER}" | cut -d. -f1)
+PY_MIN=$(echo "${PY_VER}" | cut -d. -f2)
+if [ "${PY_MAJ}" -lt 3 ] || { [ "${PY_MAJ}" -eq 3 ] && [ "${PY_MIN}" -lt 8 ]; }; then
   echo "ERROR: Python 3.8 以上が必要です (現在: ${PY_VER})"
   exit 1
 fi
