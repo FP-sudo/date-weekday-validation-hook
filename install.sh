@@ -24,6 +24,16 @@ if [ "${PY_MAJ}" -lt 3 ] || { [ "${PY_MAJ}" -eq 3 ] && [ "${PY_MIN}" -lt 8 ]; };
   exit 1
 fi
 
+# --- settings.json 妥当性チェック（破壊防止）---
+mkdir -p "$(dirname "${SETTINGS}")"
+if [ ! -f "${SETTINGS}" ]; then
+  echo '{}' > "${SETTINGS}"
+fi
+if ! jq empty "${SETTINGS}" >/dev/null 2>&1; then
+  echo "ERROR: ${SETTINGS} が有効なJSONではありません。手動で修復してから再実行してください。" >&2
+  exit 1
+fi
+
 # --- ファイル配置 ---
 mkdir -p "${HOOK_DIR}"
 cp "${HOOK_SRC}" "${HOOK_DST}"
@@ -31,17 +41,15 @@ chmod +x "${HOOK_DST}"
 echo "✓ Installed: ${HOOK_DST}"
 
 # --- settings.json 更新 ---
-mkdir -p "$(dirname "${SETTINGS}")"
-if [ ! -f "${SETTINGS}" ]; then
-  echo '{}' > "${SETTINGS}"
-fi
-
 HOOK_CMD='python3 ~/.claude/hooks/validate_dates.py'
 
 # 既に登録済みかチェック
-ALREADY=$(jq --arg cmd "${HOOK_CMD}" '
+if ! ALREADY=$(jq --arg cmd "${HOOK_CMD}" '
   [(.hooks.PostToolUse // [])[]?.hooks[]?.command // ""] | any(. == $cmd)
-' "${SETTINGS}")
+' "${SETTINGS}"); then
+  echo "ERROR: settings.json の解析に失敗しました" >&2
+  exit 1
+fi
 
 if [ "${ALREADY}" = "true" ]; then
   echo "✓ Already registered in ${SETTINGS} (skipped)"
@@ -61,11 +69,15 @@ else
     ]
   }'
 
-  jq --argjson entry "${HOOK_JSON}" '
+  if ! jq --argjson entry "${HOOK_JSON}" '
     .hooks = (.hooks // {})
     | .hooks.PostToolUse = (.hooks.PostToolUse // [])
     | .hooks.PostToolUse += [$entry]
-  ' "${SETTINGS}" > "${SETTINGS}.tmp"
+  ' "${SETTINGS}" > "${SETTINGS}.tmp"; then
+    echo "ERROR: settings.json の更新に失敗しました。バックアップは ${BACKUP} に保存済みです。" >&2
+    rm -f "${SETTINGS}.tmp"
+    exit 1
+  fi
 
   mv "${SETTINGS}.tmp" "${SETTINGS}"
   echo "✓ Registered: ${SETTINGS}"

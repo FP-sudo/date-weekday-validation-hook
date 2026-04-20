@@ -15,10 +15,15 @@ if [ -f "${HOOK_DST}" ]; then
 fi
 
 if [ -f "${SETTINGS}" ]; then
+  if ! jq empty "${SETTINGS}" >/dev/null 2>&1; then
+    echo "ERROR: ${SETTINGS} が有効なJSONではありません。手動で修復してから再実行してください。" >&2
+    exit 1
+  fi
+
   cp "${SETTINGS}" "${BACKUP}"
   echo "✓ Backup: ${BACKUP}"
 
-  jq '
+  if ! jq '
     if .hooks.PostToolUse then
       .hooks.PostToolUse |= map(
         select(
@@ -27,7 +32,11 @@ if [ -f "${SETTINGS}" ]; then
         )
       )
     else . end
-  ' "${SETTINGS}" > "${SETTINGS}.tmp"
+  ' "${SETTINGS}" > "${SETTINGS}.tmp"; then
+    echo "ERROR: settings.json の更新に失敗しました。バックアップは ${BACKUP} に保存済みです。" >&2
+    rm -f "${SETTINGS}.tmp"
+    exit 1
+  fi
 
   mv "${SETTINGS}.tmp" "${SETTINGS}"
   echo "✓ Updated: ${SETTINGS}"
